@@ -1,4 +1,9 @@
-"""堆存计费接口：维护计费单，覆盖生成账单、确认对账、开具发票等动作。"""
+"""堆存计费接口：维护计费单，覆盖试算、生成账单、确认对账、开具发票等动作。
+
+金额口径全部来自 app.services.billing：页面试算、登记、生成账单、列表、
+详情、导出拿到的是同一份结果。注意 /export、/preview 要声明在 /{entry_id}
+之前，否则会被详情路由抢占匹配。
+"""
 from __future__ import annotations
 
 from typing import Any
@@ -30,6 +35,22 @@ def list_entries(
     return PageResult(items=items, total=total, page=page, size=size)
 
 
+@router.get("/export")
+def export_entries() -> dict[str, Any]:
+    """导出堆存计费清单：返回当前过滤条件下的全量数据，金额与列表同源。"""
+    items, total = service.list_entries(page=1, size=10000)
+    return {"module": "storage", "total": total, "items": items}
+
+
+@router.post("/preview", response_model=ActionResult)
+def preview_fee(payload: EntryPayload) -> ActionResult:
+    """试算应收金额：页面展示用的金额由服务端同一口径算出，页面不再自行计算。"""
+    amount, error = service.preview_fee(payload.values)
+    if amount is None:
+        return ActionResult(ok=False, message=error)
+    return ActionResult(ok=True, message="试算成功", entry={"应收金额": amount})
+
+
 @router.get("/{entry_id}", response_model=dict)
 def get_entry(entry_id: int) -> dict:
     """读取单条计费单明细；不存在时给出可读的错误说明。"""
@@ -41,25 +62,18 @@ def get_entry(entry_id: int) -> dict:
 
 @router.post("", response_model=ActionResult)
 def create_entry(payload: EntryPayload) -> ActionResult:
-    """登记一条计费单，缺字段时说明原因而不是静默丢弃。"""
-    entry, missing = service.create_entry(payload.values)
-    if missing:
-        return ActionResult(ok=False, message=f"缺少必填字段：{'、'.join(missing)}")
-    return ActionResult(ok=True, message="计费单已登记", entry=entry)
-
-
-@router.post("/{entry_id}/actions", response_model=ActionResult)
-def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
-    """对单条计费单执行生成账单、确认对账、开具发票；不允许的动作会被拦下并说明原因。"""
-    action = str(payload.values.get("action") or "").strip()
-    entry, message = service.run_action(entry_id, action)
+    """登记一条计费单：缺字段、计费口径不满足、单号重复都会说明原因而不是静默丢弃。"""
+    entry, message = service.create_entry(payload.values)
     if entry is None:
         return ActionResult(ok=False, message=message)
     return ActionResult(ok=True, message=message, entry=entry)
 
 
-@router.get("/export")
-def export_entries() -> dict[str, Any]:
-    """导出堆存计费清单：返回当前过滤条件下的全量数据。"""
-    items, total = service.list_entries(page=1, size=10000)
-    return {"module": "storage", "total": total, "items": items}
+@router.post("/{entry_id}/actions", response_model=ActionResult)
+def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
+    """对单条计费单执行生成账单、确认对账、开具发票；状态只许前进，已开票不可回退。"""
+    action = str(payload.values.get("action") or "").strip()
+    entry, message = service.run_action(entry_id, action)
+    if entry is None:
+        return ActionResult(ok=False, message=message)
+    return ActionResult(ok=True, message=message, entry=entry)

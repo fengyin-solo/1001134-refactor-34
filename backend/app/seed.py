@@ -1,7 +1,31 @@
-"""示例数据：每个模块给几条不同状态的记录，方便起服务后立刻看到内容。"""
+"""示例数据：每个模块给几条不同状态的记录，方便起服务后立刻看到内容。
+
+堆存计费的应收金额由 app.services.billing 的共用口径算出，与线上各入口同源。
+"""
 from __future__ import annotations
 
 from typing import Any
+
+from app.services.billing import compute_storage_fee, format_amount
+
+
+def _storage_seed(entry_id: int, status: str, bill_no: str, period: str, days: str, rate: str, abnormal: bool = False) -> dict[str, Any]:
+    row: dict[str, Any] = {
+        "id": entry_id,
+        "status": status,
+        "pending": status != "已开票",
+        "abnormal": abnormal,
+        "计费单号": bill_no,
+        "关联箱号": f"堆存计费样例{entry_id}",
+        "计费周期": period,
+        "堆存天数": days,
+        "计费标准": rate,
+        "客户名称": f"堆存计费样例{entry_id}",
+        "计费状态": status,
+    }
+    row["应收金额"] = format_amount(compute_storage_fee(row))
+    return row
+
 
 SEED_ROWS: dict[str, list[dict[str, Any]]] = {
     "berth": [{'id': 1,
@@ -472,42 +496,9 @@ SEED_ROWS: dict[str, list[dict[str, Any]]] = {
   '提交时间': '2026-09-03',
   '审核人员': '单证处理样例3',
   '单证状态': '单证处理样例3'}],
-    "storage": [{'id': 1,
-  'status': '待核算',
-  'pending': True,
-  'abnormal': False,
-  '计费单号': 'STOR-0001',
-  '关联箱号': '堆存计费样例1',
-  '计费周期': '堆存计费样例1',
-  '堆存天数': '堆存计费样例1',
-  '计费标准': '堆存计费样例1',
-  '应收金额': 12.5,
-  '客户名称': '堆存计费样例1',
-  '计费状态': '堆存计费样例1'},
- {'id': 2,
-  'status': '已核算',
-  'pending': True,
-  'abnormal': True,
-  '计费单号': 'STOR-0002',
-  '关联箱号': '堆存计费样例2',
-  '计费周期': '堆存计费样例2',
-  '堆存天数': '堆存计费样例2',
-  '计费标准': '堆存计费样例2',
-  '应收金额': 25.0,
-  '客户名称': '堆存计费样例2',
-  '计费状态': '堆存计费样例2'},
- {'id': 3,
-  'status': '已对账',
-  'pending': False,
-  'abnormal': False,
-  '计费单号': 'STOR-0003',
-  '关联箱号': '堆存计费样例3',
-  '计费周期': '堆存计费样例3',
-  '堆存天数': '堆存计费样例3',
-  '计费标准': '堆存计费样例3',
-  '应收金额': 37.5,
-  '客户名称': '堆存计费样例3',
-  '计费状态': '堆存计费样例3'}],
+    "storage": [_storage_seed(1, "待核算", "STOR-0001", "2026-09-01~2026-09-07", "6", "12.50"),
+ _storage_seed(2, "已核算", "STOR-0002", "2026-09-01~2026-09-11", "10", "12.50", abnormal=True),
+ _storage_seed(3, "已对账", "STOR-0003", "2026-08-20~2026-08-23", "3", "12.50")],
     "pilot": [{'id': 1,
   'status': '待指派',
   'pending': True,

@@ -74,3 +74,7 @@ npm run dev
   `backend/app/routers/<模块>.py`，业务规则在 `backend/app/services/<模块>.py`。
 - 列表接口统一返回 `{ items, total, page, size }`，动作接口统一返回 `{ ok, message }`。
 - 状态流转只允许在 `app/services` 里改，路由层不做业务判断。
+- 堆存计费的金额口径全系统只有一份：`backend/app/services/billing.py`
+  （Decimal 定点运算、显式舍入，与环境无关）。登记、生成账单、试算
+  （`POST /api/storage/preview`）、列表、详情、导出都从这里取金额；
+  调整口径（如免费堆存天数）只改这一个文件。
